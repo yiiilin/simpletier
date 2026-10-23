@@ -1,0 +1,24 @@
+# Build artifacts
+/dist/
+/bin/
+/tests/tun_acceptance/artifacts/
+
+# Stray compiled binaries from `go build` at the module root
+/tun-agent
+/network-runtime
+/roomscale
+/doccheck
+
+# Test binaries from `go test -c`
+*.test
+
+# Generated analysis/report artifacts
+/artifacts/
+
+# Runtime scope identifiers written as if they were directories. IdentityStore
+# used to expose a path; it now returns an in-memory scope such as
+# "ephemeral://1", and anything that still treats it as a path creates a
+# directory whose name contains a colon. Such a path cannot be checked out on
+# Windows, so it must never be committed.
+ephemeral:*
+**/ephemeral:*

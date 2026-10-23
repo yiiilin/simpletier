@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+# A new push cancels the previous run of the same ref: the suites are fast
+# enough that a stale result is worth discarding.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.25.2"
+
+jobs:
+  # Fast feedback on every push: build, vet, unit tests and the race detector.
+  # Everything here is deterministic and needs nothing from the host beyond a Go
+  # toolchain. This is the gate that should stay green.
+  linux:
+    name: linux (build, unit, race)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build, vet and unit tests
+        run: scripts/test.sh build && scripts/test.sh unit
+
+      - name: Race detector
+        run: scripts/test.sh race
+
+  # Cross-node acceptance. These build real Network instances, complete a real
+  # Noise handshake over loopback TCP and move real bytes through the encrypted
+  # data plane, so they take minutes rather than seconds and exercise far more of
+  # the host than a unit test does. They run on tags and on demand, not on every
+  # push.
+  linux-acceptance:
+    name: linux acceptance (cross-node data plane)
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Cross-node business data
+        run: go test ./tests/network_runtime/ -count=1 -v
+
+      # The path an SDK user actually walks, compiled and run rather than
+      # described. A failure here means the documented example does not work.
+      - name: Documented SDK example still runs
+        run: go run ./examples/sdk-guide-check
+
+      # Not automated anywhere: it needs root, /dev/net/tun and the ability to
+      # create a network namespace and move a veth into it. The hosted runner
+      # allows the first two but not the third. Run on a real host with:
+      #
+      #     sudo go test ./tests/tun_acceptance/ -count=1 -v
+
+  # Windows stays on every push. It costs under two minutes and it is the only
+  # thing that catches Windows-only compilation and behaviour; it found four such
+  # defects before the first release, including a tree that could not be checked
+  # out at all.
+  windows:
+    name: windows (compile, unit, race)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build and vet
+        run: scripts/test-windows-build.ps1
+
+      # The Windows suites are console-only, so they run in the runner's session
+      # without an interactive desktop.
+      - name: internal/agent
+        run: go test ./internal/agent/ -count=1 -v
+
+      - name: internal/security
+        run: go test ./internal/security/ -count=1 -v
+
+      - name: internal/packet
+        run: go test ./internal/packet/ -count=1 -v
+
+      - name: Race detector
+        run: go test -race ./internal/agent/ ./internal/security/ -count=1

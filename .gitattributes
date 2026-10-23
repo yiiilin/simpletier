@@ -1,0 +1,13 @@
+# Normalize line endings on checkout for every text file. Without this, Windows
+# checks the tree out as CRLF, and gofmt then reports every file as needing
+# formatting — which is exactly how the Windows CI job failed.
+* text=auto eol=lf
+
+# PowerShell scripts keep CRLF: Windows tooling expects it, and the files are
+# only ever executed there.
+*.ps1 text eol=crlf
+
+*.go   text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.sh   text eol=lf
